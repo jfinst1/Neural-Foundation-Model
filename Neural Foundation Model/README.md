@@ -19,22 +19,22 @@ This repository contains a complete pipeline for training foundation models on n
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                Neural Data Acquisition                      │
-│   Raw EEG/LFP/Spikes → Real-time Processing → Storage      │
+│   Raw EEG/LFP/Spikes → Real-time Processing → Storage       │
 └─────────────────────────────────────────────────────────────┘
                                ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                Signal Processing Pipeline                   │
-│    Filtering → Artifact Removal → Feature Extraction       │
+│    Filtering → Artifact Removal → Feature Extraction        │
 └─────────────────────────────────────────────────────────────┘
                                ↓
 ┌─────────────────────────────────────────────────────────────┐
 │             Distributed Foundation Model Training           │
-│   Temporal Parallelism + Subject Parallelism + Privacy     │
+│   Temporal Parallelism + Subject Parallelism + Privacy      │
 └─────────────────────────────────────────────────────────────┘
                                ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              Real-time Neural Decoding                     │
-│        Streaming Inference + Control Interface             │
+│              Real-time Neural Decoding                      │
+│        Streaming Inference + Control Interface              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -497,28 +497,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - **Testing**: 90%+ code coverage (`make test`)
 - **Documentation**: Comprehensive docstrings
 
-## 📚 Documentation
-
-- [Architecture Overview](docs/architecture.md) - System design and components
-- [API Reference](docs/api_reference.md) - Complete API documentation
-- [Training Guide](docs/training.md) - Model training workflows
-- [Deployment Guide](docs/deployment.md) - Production deployment
-- [Privacy Guide](docs/privacy.md) - Privacy-preserving techniques
-- [Contributing Guidelines](CONTRIBUTING.md) - Development guidelines
-
-## 🏆 Citation
-
-If you use this work in your research, please cite:
-
-```bibtex
-@software{neural_foundation_model,
-  title={Neural Foundation Model Training Pipeline},
-  author={Neural AI Research Team},
-  year={2025},
-  url={https://github.com/your-org/neural-foundation-model},
-  version={1.0.0}
-}
-```
 
 ## ⚖️ License
 
@@ -537,13 +515,6 @@ This technology processes human neural data - the most sensitive personal inform
 - ✅ **Right to Withdrawal**: Participants can remove their data
 
 **"The brain is a battlefield – build responsibly."**
-
-## 🆘 Support
-
-- 📖 [Documentation](https://neural-foundation-model.readthedocs.io/)
-- 💬 [Discord Community](https://discord.gg/neural-foundation)
-- 🐛 [Issue Tracker](https://github.com/your-org/neural-foundation-model/issues)
-- 📧 [Email Support](mailto:support@neural-foundation.com)
 
 ## 🗺️ Roadmap
 
