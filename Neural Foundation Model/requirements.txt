@@ -1,0 +1,122 @@
+# Neural Foundation Model Training Pipeline
+# Production requirements for neural data foundation models
+
+# Core ML Libraries
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+transformers>=4.35.0
+accelerate>=0.24.0
+
+# Distributed Training
+ray[tune]>=2.8.0
+deepspeed>=0.12.0
+horovod>=0.28.0
+
+# Neural Data Processing
+mne>=1.5.0
+neo>=0.12.0
+elephant>=0.14.0
+pynapple>=0.6.0
+spikeinterface>=0.99.0
+braindecode>=0.8.0
+
+# Signal Processing
+scipy>=1.11.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+pandas>=2.1.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Data Handling
+h5py>=3.9.0
+zarr>=2.16.0
+dask[complete]>=2023.10.0
+fsspec>=2023.9.0
+pyarrow>=13.0.0
+
+# Privacy & Security
+opacus>=1.4.0
+cryptography>=41.0.0
+pycryptodome>=3.18.0
+differential-privacy>=1.1.5
+
+# Monitoring & Logging
+wandb>=0.16.0
+mlflow>=2.8.0
+tensorboard>=2.15.0
+prometheus-client>=0.18.0
+
+# Configuration & Utils
+hydra-core>=1.3.0
+omegaconf>=2.3.0
+click>=8.1.0
+rich>=13.6.0
+tqdm>=4.66.0
+pyyaml>=6.0.1
+
+# Time Series Analysis
+tslearn>=0.6.0
+stumpy>=1.12.0
+pyts>=0.12.0
+
+# Real-time Processing
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+asyncio-mqtt>=0.13.0
+aiofiles>=23.2.0
+uvloop>=0.19.0
+pydantic>=2.4.0
+
+# Kubernetes & Cloud
+kubernetes>=27.2.0
+boto3>=1.28.0
+google-cloud-storage>=2.10.0
+azure-storage-blob>=12.19.0
+
+# Database & Storage
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+redis>=5.0.0
+pymongo>=4.5.0
+
+# Development Tools (optional, installed with [dev])
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+hypothesis>=6.88.0
+black>=23.9.0
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.6.0
+pre-commit>=3.5.0
+
+# Documentation (optional)
+sphinx>=7.2.0
+sphinx-rtd-theme>=1.3.0
+myst-parser>=2.0.0
+
+# Profiling & Debugging (optional)
+py-spy>=0.3.14
+memory-profiler>=0.60.0
+line-profiler>=4.1.0
+scalene>=1.5.0
+
+# CUDA Acceleration (optional, install separately)
+# cupy-cuda11x>=12.2.0
+# cudf-cu11>=23.8.0
+# cugraph-cu11>=23.8.0
+
+# Inference Optimization (optional)
+# onnxruntime-gpu>=1.16.0
+# tensorrt>=8.6.0
+# triton-python-backend>=2.35
+
+# Experimental/Research (optional)
+# jax[cuda]>=0.4.13
+# flax>=0.7.0
+# optax>=0.1.7
+# chex>=0.1.8

@@ -1,0 +1,253 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neural-foundation-model"
+version = "0.1.0"
+authors = [
+    {name = "Neural AI Team", email = "team@neural-foundation.com"},
+]
+description = "Scalable distributed training pipeline for neural data foundation models"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+keywords = [
+    "neuroscience", "brain-computer-interface", "foundation-model",
+    "distributed-training", "neural-decoding", "pytorch"
+]
+
+dependencies = [
+    # Core ML libraries
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "torchaudio>=2.0.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+    
+    # Distributed training
+    "ray[tune]>=2.5.0",
+    "deepspeed>=0.10.0",
+    "horovod>=0.28.0",
+    
+    # Neural data processing
+    "mne>=1.4.0",
+    "neo>=0.12.0",
+    "elephant>=0.14.0",
+    "pynapple>=0.6.0",
+    "spikeinterface>=0.98.0",
+    "braindecode>=0.8.0",
+    
+    # Signal processing
+    "scipy>=1.10.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+    "pandas>=2.0.0",
+    
+    # Data handling
+    "h5py>=3.8.0",
+    "zarr>=2.15.0",
+    "dask[complete]>=2023.6.0",
+    "fsspec>=2023.6.0",
+    
+    # Privacy & Security
+    "opacus>=1.4.0",
+    "cryptography>=41.0.0",
+    "pycryptodome>=3.18.0",
+    
+    # Monitoring & Logging
+    "wandb>=0.15.0",
+    "mlflow>=2.5.0",
+    "tensorboard>=2.13.0",
+    "prometheus-client>=0.17.0",
+    
+    # Configuration & Utils
+    "hydra-core>=1.3.0",
+    "omegaconf>=2.3.0",
+    "click>=8.1.0",
+    "rich>=13.4.0",
+    "tqdm>=4.65.0",
+    
+    # Time series utilities
+    "tslearn>=0.6.0",
+    "stumpy>=1.12.0",
+    
+    # Real-time processing
+    "asyncio-mqtt>=0.13.0",
+    "aiofiles>=23.1.0",
+    "uvloop>=0.17.0",
+    
+    # Kubernetes & Cloud
+    "kubernetes>=27.2.0",
+    "boto3>=1.28.0",
+    "google-cloud-storage>=2.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.0",
+    "hypothesis>=6.80.0",
+    
+    # Code quality
+    "black>=23.7.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.3.0",
+    
+    # Documentation
+    "sphinx>=7.1.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "myst-parser>=2.0.0",
+    
+    # Profiling
+    "py-spy>=0.3.14",
+    "memory-profiler>=0.60.0",
+    "line-profiler>=4.1.0",
+]
+
+cuda = [
+    "cupy-cuda11x>=12.2.0",
+    "cudf-cu11>=23.8.0",
+    "cugraph-cu11>=23.8.0",
+]
+
+inference = [
+    "onnxruntime-gpu>=1.15.0",
+    "tensorrt>=8.6.0",
+    "triton-python-backend>=2.35",
+]
+
+experimental = [
+    "jax[cuda]>=0.4.13",
+    "flax>=0.7.0",
+    "optax>=0.1.7",
+    "chex>=0.1.8",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/neural-foundation-model"
+Documentation = "https://neural-foundation-model.readthedocs.io/"
+Repository = "https://github.com/your-org/neural-foundation-model.git"
+"Bug Tracker" = "https://github.com/your-org/neural-foundation-model/issues"
+
+[project.scripts]
+neural-train = "neural_foundation.scripts.train:main"
+neural-infer = "neural_foundation.scripts.inference:main"
+neural-process = "neural_foundation.scripts.preprocessing:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"neural_foundation" = ["configs/*.yaml", "models/*.json"]
+
+# Black configuration
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort configuration
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["neural_foundation"]
+known_third_party = [
+    "torch", "numpy", "pandas", "scipy", "sklearn",
+    "mne", "neo", "elephant", "ray", "wandb"
+]
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "mne.*",
+    "neo.*",
+    "elephant.*",
+    "pynapple.*",
+    "spikeinterface.*",
+    "braindecode.*"
+]
+ignore_missing_imports = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "gpu: marks tests that require GPU",
+    "distributed: marks tests for distributed training",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src/neural_foundation"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py",
+    "conftest.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:"
+]

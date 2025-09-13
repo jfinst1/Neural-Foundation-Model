@@ -1,0 +1,463 @@
+# Neural Foundation Model - Docker Compose
+# Complete development and training environment
+
+version: '3.8'
+
+services:
+  # Neural Foundation Model Training
+  neural-training:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.training
+    image: neural-foundation-model:latest
+    container_name: neural-training
+    restart: unless-stopped
+    
+    # GPU access
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+    
+    # Volumes for data and checkpoints
+    volumes:
+      - ../data:/workspace/data:ro
+      - ../outputs:/workspace/outputs
+      - ../checkpoints:/workspace/checkpoints
+      - ../logs:/workspace/logs
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    
+    # Environment variables
+    environment:
+      - PYTHONPATH=/workspace/src
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    
+    # Network
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import torch; print(f'CUDA: {torch.cuda.is_available()}')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          memory: 64G
+          cpus: '16'
+
+  # Real-time Inference Server
+  neural-inference:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    image: neural-foundation-inference:latest
+    container_name: neural-inference
+    restart: unless-stopped
+    
+    # GPU access for inference
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+    
+    # Volumes
+    volumes:
+      - ../models:/workspace/models:ro
+      - ../logs:/workspace/logs
+    
+    # Environment variables
+    environment:
+      - PYTHONPATH=/workspace/src
+      - MODEL_PATH=/workspace/models/foundation_model.pt
+      - INFERENCE_TASK=motor_control
+      - DEVICE=cuda
+    
+    # Ports
+    ports:
+      - "8080:8080"  # FastAPI server
+      - "8081:8081"  # Metrics endpoint
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    
+    # Resource limits
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 16G
+          cpus: '8'
+    
+    # Depends on training to have models
+    depends_on:
+      - neural-training
+
+  # MLflow Tracking Server
+  mlflow:
+    image: python:3.9-slim
+    container_name: mlflow-server
+    restart: unless-stopped
+    
+    # Install MLflow
+    command: >
+      bash -c "
+        pip install mlflow[extras] psycopg2-binary boto3 &&
+        mlflow server 
+          --host 0.0.0.0 
+          --port 5000 
+          --backend-store-uri postgresql://mlflow:mlflow@postgres:5432/mlflow 
+          --default-artifact-root s3://neural-foundation-artifacts/
+          --serve-artifacts
+      "
+    
+    # Ports
+    ports:
+      - "5000:5000"
+    
+    # Environment for S3/MinIO
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Depends on database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # PostgreSQL for MLflow
+  postgres:
+    image: postgres:15-alpine
+    container_name: mlflow-postgres
+    restart: unless-stopped
+    
+    # Environment
+    environment:
+      - POSTGRES_DB=mlflow
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_INITDB_ARGS="--encoding=UTF-8"
+    
+    # Volumes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    
+    # Ports (for external access)
+    ports:
+      - "5432:5432"
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # MinIO for Artifact Storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio-storage
+    restart: unless-stopped
+    
+    # Command
+    command: server /data --console-address ":9001"
+    
+    # Environment
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    
+    # Volumes
+    volumes:
+      - minio_data:/data
+    
+    # Ports
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis for Caching
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    restart: unless-stopped
+    
+    # Command with persistence
+    command: redis-server --appendonly yes --appendfsync everysec
+    
+    # Volumes
+    volumes:
+      - redis_data:/data
+    
+    # Ports
+    ports:
+      - "6379:6379"
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Prometheus for Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-metrics
+    restart: unless-stopped
+    
+    # Configuration
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    # Command
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    
+    # Ports
+    ports:
+      - "9090:9090"
+    
+    # Networks
+    networks:
+      - neural-network
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-dashboard
+    restart: unless-stopped
+    
+    # Environment
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    # Volumes
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    # Ports
+    ports:
+      - "3000:3000"
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Depends on Prometheus
+    depends_on:
+      - prometheus
+
+  # Jupyter Notebook for Development
+  jupyter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.training
+    image: neural-foundation-model:latest
+    container_name: jupyter-dev
+    restart: unless-stopped
+    
+    # Command
+    command: >
+      bash -c "
+        pip install jupyter jupyterlab ipywidgets &&
+        jupyter lab 
+          --ip=0.0.0.0 
+          --port=8888 
+          --no-browser 
+          --allow-root 
+          --NotebookApp.token='' 
+          --NotebookApp.password=''
+      "
+    
+    # GPU access
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    
+    # Volumes
+    volumes:
+      - ..:/workspace
+      - jupyter_data:/root/.jupyter
+    
+    # Environment
+    environment:
+      - PYTHONPATH=/workspace/src
+      - JUPYTER_ENABLE_LAB=yes
+    
+    # Ports
+    ports:
+      - "8888:8888"
+    
+    # Networks
+    networks:
+      - neural-network
+
+  # Data Processing Service
+  data-processor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.training
+    image: neural-foundation-model:latest
+    container_name: data-processor
+    restart: "no"  # Run on demand
+    
+    # Command
+    command: python3 scripts/data_preprocessing.py --input /data/raw --output /data/processed
+    
+    # Volumes
+    volumes:
+      - ../data:/data
+      - ../logs:/workspace/logs
+    
+    # Environment
+    environment:
+      - PYTHONPATH=/workspace/src
+    
+    # Networks
+    networks:
+      - neural-network
+    
+    # Profiles for optional services
+    profiles:
+      - data-processing
+
+# Networks
+networks:
+  neural-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  jupyter_data:
+    driver: local
+
+# Development overrides
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+---
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  neural-training:
+    # Development overrides
+    volumes:
+      - ..:/workspace  # Mount entire source for development
+    
+    # Interactive mode
+    stdin_open: true
+    tty: true
+    
+    # Override command for development
+    command: >
+      bash -c "
+        pip install -e . &&
+        python3 scripts/train_foundation_model.py 
+          --config configs/training/dev_config.yaml
+      "
+    
+    # Environment for development
+    environment:
+      - PYTHONPATH=/workspace/src
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - CUDA_LAUNCH_BLOCKING=1  # For debugging
+      - TORCH_SHOW_CPP_STACKTRACES=1
+
+  neural-inference:
+    # Development overrides
+    volumes:
+      - ..:/workspace
+    
+    # Override for development
+    command: >
+      bash -c "
+        pip install -e . &&
+        python3 scripts/real_time_inference.py 
+          --model-path /workspace/models/foundation_model.pt
+          --task motor_control
+          --port 8080
+          --log-level DEBUG
+      "

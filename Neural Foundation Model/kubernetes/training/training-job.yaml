@@ -1,0 +1,481 @@
+# Kubernetes Job for Distributed Neural Foundation Model Training
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: neural-foundation-training
+  namespace: ml-training
+  labels:
+    app: neural-foundation-model
+    component: training
+    version: v1.0.0
+spec:
+  parallelism: 8  # Number of parallel pods
+  completions: 8  # Total number of successful completions needed
+  backoffLimit: 3
+  activeDeadlineSeconds: 86400  # 24 hours
+  template:
+    metadata:
+      labels:
+        app: neural-foundation-model
+        component: training
+    spec:
+      restartPolicy: Never
+      
+      # Node selection for GPU nodes
+      nodeSelector:
+        accelerator: nvidia-tesla-v100
+        node-type: gpu-training
+      
+      # Tolerations for GPU nodes
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # Service account for accessing storage
+      serviceAccountName: neural-training-sa
+      
+      # Init container for data preparation
+      initContainers:
+      - name: data-preparation
+        image: neural-foundation-model:latest
+        imagePullPolicy: Always
+        command: ["python3", "scripts/prepare_training_data.py"]
+        env:
+        - name: DATA_SOURCE_PATH
+          value: "/data/raw"
+        - name: DATA_OUTPUT_PATH
+          value: "/data/processed"
+        volumeMounts:
+        - name: data-storage
+          mountPath: /data
+        - name: config-volume
+          mountPath: /config
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+      
+      containers:
+      - name: neural-foundation-trainer
+        image: neural-foundation-model:latest
+        imagePullPolicy: Always
+        
+        # Distributed training command
+        command: 
+        - "torchrun"
+        - "--nnodes=$(WORLD_SIZE)"
+        - "--nproc_per_node=$(GPUS_PER_NODE)"
+        - "--node_rank=$(RANK)"
+        - "--master_addr=$(MASTER_ADDR)"
+        - "--master_port=$(MASTER_PORT)"
+        - "scripts/train_foundation_model.py"
+        - "--config=/config/training_config.yaml"
+        - "--distributed"
+        
+        env:
+        # Distributed training configuration
+        - name: WORLD_SIZE
+          value: "8"
+        - name: GPUS_PER_NODE
+          value: "1"
+        - name: RANK
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+        - name: MASTER_ADDR
+          value: "neural-foundation-training-master"
+        - name: MASTER_PORT
+          value: "12355"
+        
+        # NCCL configuration
+        - name: NCCL_DEBUG
+          value: "INFO"
+        - name: NCCL_SOCKET_IFNAME
+          value: "eth0"
+        - name: NCCL_IB_DISABLE
+          value: "1"
+        
+        # CUDA configuration
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        
+        # Application configuration
+        - name: PYTHONPATH
+          value: "/workspace/src"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: WANDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secret
+              key: api-key
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow-service:5000"
+        
+        # Resource allocation
+        resources:
+          requests:
+            cpu: "4"
+            memory: "32Gi"
+            nvidia.com/gpu: 1
+          limits:
+            cpu: "8"
+            memory: "64Gi"
+            nvidia.com/gpu: 1
+        
+        # Volume mounts
+        volumeMounts:
+        - name: data-storage
+          mountPath: /data
+        - name: checkpoint-storage
+          mountPath: /checkpoints
+        - name: logs-storage
+          mountPath: /logs
+        - name: config-volume
+          mountPath: /config
+        - name: shared-memory
+          mountPath: /dev/shm
+        
+        # Ports for distributed communication
+        ports:
+        - containerPort: 12355
+          name: dist-training
+        - containerPort: 8080
+          name: metrics
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+      
+      # Volumes
+      volumes:
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: neural-data-pvc
+      - name: checkpoint-storage
+        persistentVolumeClaim:
+          claimName: neural-checkpoints-pvc
+      - name: logs-storage
+        persistentVolumeClaim:
+          claimName: neural-logs-pvc
+      - name: config-volume
+        configMap:
+          name: neural-training-config
+      - name: shared-memory
+        emptyDir:
+          medium: Memory
+          sizeLimit: "8Gi"
+
+---
+# Service for distributed training coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: neural-foundation-training-master
+  namespace: ml-training
+  labels:
+    app: neural-foundation-model
+    component: training-master
+spec:
+  type: ClusterIP
+  ports:
+  - port: 12355
+    targetPort: 12355
+    protocol: TCP
+    name: dist-training
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: metrics
+  selector:
+    app: neural-foundation-model
+    component: training
+
+---
+# ConfigMap for training configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neural-training-config
+  namespace: ml-training
+data:
+  training_config.yaml: |
+    # Neural Foundation Model Training Configuration
+    model:
+      num_channels: 64
+      hidden_dim: 512
+      num_layers: 12
+      num_heads: 8
+      context_length: 10000
+      dropout: 0.1
+    
+    data:
+      train_path: "/data/processed/train"
+      val_path: "/data/processed/val"
+      sampling_rate: 1000
+      temporal_window: 10.0
+      batch_size: 8
+      num_workers: 4
+      num_subjects: 100
+      channels: null  # Use all channels
+      
+      preprocessing:
+        enable_filtering: true
+        low_freq: 1.0
+        high_freq: 100.0
+        normalize: true
+    
+    training:
+      num_epochs: 100
+      batch_size: 8
+      val_batch_size: 16
+      gradient_accumulation_steps: 4
+      mixed_precision: "bf16"
+      output_dir: "/checkpoints"
+      
+      gradient_clipping:
+        enabled: true
+        max_norm: 1.0
+      
+      hyperparameter_optimization:
+        enabled: false
+        num_trials: 50
+    
+    optimizer:
+      name: "adamw"
+      lr: 1e-4
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+      eps: 1e-8
+    
+    scheduler:
+      enabled: true
+      name: "cosine_annealing"
+      warmup_steps: 1000
+      total_steps: 100000
+    
+    loss:
+      reconstruction:
+        enabled: true
+        type: "mse"
+        weight: 1.0
+      contrastive:
+        enabled: true
+        temperature: 0.1
+        weight: 0.5
+      temporal_consistency:
+        enabled: true
+        weight: 0.3
+      subject_invariance:
+        enabled: true
+        weight: 0.2
+    
+    privacy:
+      enabled: false
+      noise_multiplier: 1.0
+      max_grad_norm: 1.0
+      delta: 1e-5
+      sample_size: 10000
+    
+    logging:
+      enabled: true
+      backend: "wandb"  # or "mlflow"
+      level: "INFO"
+      log_every_n_steps: 100
+      
+      wandb:
+        project: "neural-foundation-model"
+        run_name: "distributed-training-v1"
+      
+      mlflow:
+        experiment_name: "neural-foundation-model"
+        run_name: "distributed-training-v1"
+    
+    callbacks:
+      checkpointing:
+        enabled: true
+        save_dir: "/checkpoints"
+        save_every_n_epochs: 10
+        save_top_k: 3
+      
+      early_stopping:
+        enabled: true
+        patience: 20
+        min_delta: 0.001
+
+---
+# PersistentVolumeClaim for training data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neural-data-pvc
+  namespace: ml-training
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 1Ti
+
+---
+# PersistentVolumeClaim for checkpoints
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neural-checkpoints-pvc
+  namespace: ml-training
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# PersistentVolumeClaim for logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neural-logs-pvc
+  namespace: ml-training
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# ServiceAccount for training pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: neural-training-sa
+  namespace: ml-training
+
+---
+# Role for accessing resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: neural-training-role
+  namespace: ml-training
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding for ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: neural-training-rolebinding
+  namespace: ml-training
+subjects:
+- kind: ServiceAccount
+  name: neural-training-sa
+  namespace: ml-training
+roleRef:
+  kind: Role
+  name: neural-training-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# HorizontalPodAutoscaler for inference (if needed)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: neural-training-hpa
+  namespace: ml-training
+spec:
+  scaleTargetRef:
+    apiVersion: batch/v1
+    kind: Job
+    name: neural-foundation-training
+  minReplicas: 1
+  maxReplicas: 16
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# NetworkPolicy for secure communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: neural-training-netpol
+  namespace: ml-training
+spec:
+  podSelector:
+    matchLabels:
+      app: neural-foundation-model
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: neural-foundation-model
+    ports:
+    - protocol: TCP
+      port: 12355
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: neural-foundation-model
+    ports:
+    - protocol: TCP
+      port: 12355
+  - to: []  # Allow external access for model registry, logging, etc.
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP

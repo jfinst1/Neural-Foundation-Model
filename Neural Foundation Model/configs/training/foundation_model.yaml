@@ -1,0 +1,31 @@
+# Neural Foundation Model Training Configuration
+# Comprehensive configuration for distributed training on neural data
+
+defaults:
+  - model: neural_foundation_base
+  - optimizer: adamw
+  - scheduler: cosine_annealing
+  - loss: multi_task
+  - callbacks: default
+  - _self_
+
+# Experiment metadata
+experiment:
+  name: "neural_foundation_model_v1"
+  description: "Foundation model training on multi-subject neural data"
+  tags: ["foundation-model", "neural-data", "distributed-training"]
+  version: "1.0.0"
+
+# Model architecture configuration
+model:
+  # Basic architecture
+  num_channels: 64
+  sampling_rate: 1000
+  context_length: 10000  # 10 seconds at 1kHz
+  hidden_dim: 512
+  num_layers: 12
+  num_heads: 8
+  dropout: 0.1
+  
+  # Multi-scale temporal processing
+  temporal_scales: [0.001, 0.01,
