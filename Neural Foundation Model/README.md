@@ -538,9 +538,6 @@ This technology processes human neural data - the most sensitive personal inform
 
 ---
 
-**Built with ❤️ for advancing human potential through ethical AI**)
-- 📧 [Email Support](mailto:support@neural-foundation.com)
-
 ## 🗺️ Roadmap
 
 ### Q1 2025
@@ -562,5 +559,3 @@ This technology processes human neural data - the most sensitive personal inform
 - [ ] Community ecosystem expansion
 
 ---
-
-**Built with ❤️ for advancing human potential through ethical AI**
